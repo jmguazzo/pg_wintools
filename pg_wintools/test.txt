@@ -1,0 +1,170 @@
+pg_wintools.dll
+===============
+Step 1 : Manual copy of the dll in the lib folder on postgresql on different OS (running in VM) and execution of "registry test values.reg"
+
+Step 2 : Creation of all functions. (See create_functions.sql)
+
+test		Win2012R2	Win8.1		Win10	Win2008R2 
+--------	---------	------		-----	---------
+32bits		Passed		Passed		Passed	Passed
+64bits		Passed		Passed		Passed	Passed
+
+
+Step 3 : All other tests will be carried on 
+- one VM with Win2012R2 clean install with postgresql 9.5 32bits
+- one VM with Win2012R2 clean install with postgresql 9.4 64bits
+___________________________________________________________________
+pg_fixed_drives_list
+========================
+Function that returns fixed disks information (Name, total size and free space).
+
+Expected params :
+ - none
+
+Returns : 
+ - SETOF RECORD with the form (drive text,total_size int, free_space int). One record for each fixed disk
+ 
+Example :
+select * from pg_fixed_drives_list() lst (drive text,total_size int, free_space int)
+
+List of manuals tests 
+test								32Bits		64Bits		Query
+----------------------------------	---------	-------		-------------------------------------------------------
+#behaviour test
+no params							Passed		Passed		select * from pg_fixed_drives_list() lst (drive text,total_size int, free_space int);
+
+___________________________________________________________________
+pg_write_event_log_entry
+========================
+Function to write an entry into the eventlog.
+This entry will be under the "Postgresql" source.
+
+Expected params :
+ - message text
+ - eventtype int (1 =error, 2 warning,4 =information)
+
+Returns : 
+ - null
+
+ Example : 
+ select pg_write_event_log_entry('Test from psql',4);
+
+List of manuals tests 
+test								32Bits		64Bits		Query
+----------------------------------	---------	-------		-------------------------------------------------------
+#params test
+2 params null						Passed		Passed		select pg_write_event_log_entry(null,null);
+null,x								Passed		Passed		select pg_write_event_log_entry(null,1);
+'',null								Passed		Passed		select pg_write_event_log_entry('',null);
+32k> char,x							Passed		Passed		select pg_write_event_log_entry((select string_agg(generate_series::text,',') from generate_series(1,100000)),1);
+
+#behaviour test params(message,event
+14 char,1							Passed		Passed		select pg_write_event_log_entry('this is a test',1);
+14 char,2							Passed		Passed		select pg_write_event_log_entry('this is a test',2);
+14 char,4							Passed		Passed		select pg_write_event_log_entry('this is a test',4);
+14 char,65000						Passed		Passed		select pg_write_event_log_entry('this is a test',65000);
+Serie 1-1000 char,1					Passed		Passed		select pg_write_event_log_entry((select string_agg(generate_series::text,',') from generate_series(1,1000)),1);
+Serie 1-1000 char,2					Passed		Passed		select pg_write_event_log_entry((select string_agg(generate_series::text,',') from generate_series(1,1000)),2);
+Serie 1-1000 char,4					Passed		Passed		select pg_write_event_log_entry((select string_agg(generate_series::text,',') from generate_series(1,1000)),4);
+Serie 1-1000 char,65000				Passed		Passed		select pg_write_event_log_entry((select string_agg(generate_series::text,',') from generate_series(1,1000)),65000);
+
+___________________________________________________________________
+pg_file_exists
+==============
+Checks that a file/folder exists on the machine.
+Security restriction on a file
+Expected params :
+ - filename text (This can be in the form of an unc like \\server\share\filename)
+
+Returns : boolean true if file exists and access is granted by OS, false otherwise.
+
+ Example : 
+ select pg_file_exists('c:\windows\explorer.exe');
+
+List of manuals tests 
+test								32Bits		64Bits		Query
+----------------------------------	---------	-------		---------------------------------------------------------
+#params test
+1 param null						Passed		Passed		select pg_file_exists(null);
+
+#behaviour test params(filename)
+#true
+'c:\windows\'						Passed		Passed		select pg_file_exists('c:\windows\');
+'c:\windows\explorer.exe'			Passed		Passed		select pg_file_exists('c:\windows\explorer.exe');
+#true (requires share on network)
+'\\192.168.1.233\postgresql.txt'    Passed		Passed		select pg_file_exists('\\192.168.1.233\postgresql.txt');
+#false : blocked by security
+'\\127.0.0.1\admin$\explorer.exe'   Passed		Passed		select pg_file_exists('\\127.0.0.1\admin$\explorer.exe');
+#false : no existence
+'\\999.999.0.1\no\no.exe'			Passed		Passed		select pg_file_exists('\\999.999.0.1\no\no.exe');
+'x:\doesntexists.no\nofilehere.txt'	Passed		Passed		select pg_file_exists('x:\doesntexists.no\nofilehere.txt');
+
+___________________________________________________________________
+
+pg_hostname
+==============
+Gets the hostname of the server running the postgresql cluster
+No params.
+
+Returns : text containing the hostname
+
+Example :
+	select pg_hostname();
+
+List of manuals tests 
+test								32Bits		64Bits		Query
+----------------------------------	---------	-------		---------------------------------------------------------
+#params test
+no params							Passed		Passed		select pg_hostname();
+
+
+___________________________________________________________________
+
+pg_read_registry
+================
+Reads the value of a registry key.
+This function is only available to SUPERUSER.
+
+Expected params :
+ -root key text ('HKLM' or 'HKCR' or 'HKCU')
+ -key name text
+ -key value text
+
+ Returns : the value as text. 
+ If the value is binary, the output is made of hexa values in the form 'xx xx xx ' with 
+ a maximum length of 1024. (+- 340 bytes)
+
+ Example :
+ select pg_Read_Registry('HKLM','SOFTWARE\Microsoft\Windows\CurrentVersion\Installer','InstallerLocation');
+
+use 'registry test values.reg' file for tests
+
+List of manuals tests 
+test								32Bits		64Bits		Query
+----------------------------------	---------	-------		---------------------------------------------------------
+#params test
+null,null,null						Passed		Passed		select pg_Read_Registry(null,null,null);
+'',null,null						Passed		Passed		select pg_Read_Registry('',null,null);
+null,'',null						Passed		Passed		select pg_Read_Registry(null,'',null);
+null,null,''						Passed		Passed		select pg_Read_Registry(null,null,'');
+
+#behaviour test params(root_key,key_name,key_value)
+#root  ='HKLM'
+#key_name = 'HKEY_LOCAL_MACHINE\SOFTWARE\pg_read_registry test'
+
+#key_value = 'InstallerLocation'
+'wrong',key_name,key_Value			Passed		Passed		select pg_read_registry('','SOFTWARE\pg_read_registry test','stringValue');
+root,'wrong',key_Value				Passed		Passed		select pg_read_registry('HKLM','SOFTWARE\pg_read_registry not present','stringValue');
+root,key_name,'wrong'				Passed		Passed		select pg_read_registry('HKLM','SOFTWARE\pg_read_registry test','no value defined');
+
+root,key_name,'stringValue'			Passed		Passed		select pg_read_registry('HKLM','SOFTWARE\pg_read_registry test','stringValue');
+root,key_name,'binaryValue'			Passed		Passed		select pg_read_registry('HKLM','SOFTWARE\pg_read_registry test','binaryValue');
+root,key_name,'dwordValue0'			Passed		Passed		select pg_read_registry('HKLM','SOFTWARE\pg_read_registry test','dwordValue0');
+root,key_name,'dwordValue42584'		Passed		Passed		select pg_read_registry('HKLM','SOFTWARE\pg_read_registry test','dwordValue42584');
+root,key_name,'qwordValue'			Passed		Passed		select pg_read_registry('HKLM','SOFTWARE\pg_read_registry test','qwordValue');
+root,key_name,'qwordValueMAX'		Passed		Passed		select pg_read_registry('HKLM','SOFTWARE\pg_read_registry test','qwordValueMAX');
+root,key_name,'multiStringValue'	Passed		Passed		select pg_read_registry('HKLM','SOFTWARE\pg_read_registry test','multiStringValue');
+root,key_name,'expandStringValue'	Passed		Passed		select pg_read_registry('HKLM','SOFTWARE\pg_read_registry test','expandStringValue');
+
+#keys with restricted access
+root,key_name,key_value				Passed		Passed		select pg_read_registry('HKLM','SYSTEM\CurrentControlSet\Services\EventLog\Security','PrimaryModule')
